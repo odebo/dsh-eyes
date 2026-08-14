@@ -1,0 +1,6 @@
+# dsh-eyes bundle patch: mounts the plugin into a profile layer stack.
+# Runtime defaults live in lib/index.js Config; users override them in their
+# profile patch row with the same id, or via the dsh-eyes settings namespace.
+- insert:
+    - id: dsh-eyes
+      name: 'dsh-eyes'

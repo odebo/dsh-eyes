@@ -40,11 +40,15 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "@deepseek-ai/schemastery": "^3.18.0"
+    "@deepseek-ai/schemastery": "^3.18.0",
+    "@deepseek-ai/dsh-client-ui-primitives": "^0.0.1"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/schemastery": {
       "optional": false
+    },
+    "@deepseek-ai/dsh-client-ui-primitives": {
+      "optional": true
     }
   }
 }

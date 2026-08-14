@@ -70,7 +70,7 @@ dsh-eyes:
 挂进 dsh web profile(`~/.dsh/profiles/web/package.json`):
 
 ```json
-"dependencies": { "dsh-eyes": "link:/Users/zhuqichen/MySpace/dsh-eyes" },
+"dependencies": { "dsh-eyes": "link:<path-to-dsh-eyes-repo>" },
 "dsh": { "profile": { "bundles": [ "...", "dsh-eyes" ] } }
 ```
 

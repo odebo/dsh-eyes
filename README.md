@@ -1,60 +1,79 @@
 # dsh-eyes
 
-**Vision bridge for text-only DeepSeek models in DeepSeek Harness (dsh).**
+**给纯文本 DeepSeek 模型长一双眼睛。**
 
-Paste images into the dsh Web UI dialog; `dsh-eyes` silently converts each image to a text description using a separate multimodal model, then hands the text to your preferred text-only DeepSeek model — **no model switching, no separate DeepSeek API key**.
+在 dsh Web UI 里直接贴图;`dsh-eyes` 在后台用一个多模态模型把图转成文字描述,再交给你的纯文本模型回答——**不用切模型、不用选任何特殊 provider、不需要额外的 DeepSeek API key**。
 
-## How it works
+## 工作原理(透明)
 
-`dsh-eyes` registers a wrapper LLM provider route `deepseek-eyes` that declares image input, so dsh's image admission gate admits pasted images. At request time the wrapper:
+不注册包装 provider,不要求用户在模型选择器里选任何新东西。用户继续用平时的文本模型(如 `tongyi/deepseek-v4-pro`)。`dsh-eyes` 监听 `agent/pre-step` 瀑布:
 
-1. Reads each pasted image's bytes via the dsh attachment service.
-2. Asks a multimodal model (default `tongyi/qwen3.7-plus` on mify's Anthropic path) to describe it.
-3. Replaces the image block with a `[image] <description>` text evidence block.
-4. Delegates the now-text-only request to the real text adapter (`mify-deepseek` / `tongyi/deepseek-v4-pro`).
+1. 当这一步的消息里有图片块时,读图片字节(dsh attachment 服务)。
+2. 用配置的多模态模型(默认 `tongyi/qwen3.7-plus`,mify 的 Anthropic 路径)描述图片。
+3. 把图片块替换成 `[image] <描述>` 文字证据块。
+4. 改写后的消息就是 agent loop 写入 session 的内容,模型只看到文字。
 
-The durable session log keeps the native image block (the UI shows your thumbnail); only the wire messages carry evidence text.
+改写发生在消息进入 session 之前,所以「模型可见 ⟺ 已记录」不变量天然成立,不需要任何 adapter 包装。
 
-## Usage
+## 使用
 
-1. In the dsh Web UI, select the model **`deepseek-eyes` → `deepseek-v4-pro`** (or set `agent-default-model` to `{ provider: deepseek-eyes, model: tongyi/deepseek-v4-pro }`).
-2. Paste an image into the dialog and send.
-3. The text model answers with image understanding — no manual model switching.
+1. 给文本模型的路由声明图片输入(见下方「前提」)。
+2. 在对话里贴图、发送。
+3. 文本模型基于图片描述回答——全程无感。
 
-## Configuration
+## 前提:让文本模型的路由声明图片输入
 
-Defaults are baked in and work with the mify internal endpoint + existing `MIFY_DEEPSEEK_API_KEY`. Override in `~/.dsh/settings.yaml`:
+贴图要能通过 dsh 的图片准入闸口,文本模型所属的 provider 必须声明 `image` 输入。在 `~/.dsh/settings.yaml` 里给 provider 加 `defaultInput: [text, image]`(mify 示例):
+
+```yaml
+llm-pi-ai:
+  providers:
+    mify-deepseek:
+      apiKeyEnv: MIFY_DEEPSEEK_API_KEY
+      api: anthropic-messages
+      baseURL: https://api.llm.mioffice.cn/anthropic
+      defaultInput: [ "text", "image" ]   # ← 让 deepseek-v4-pro 等文本模型也能接收贴图
+      models:
+        - id: tongyi/deepseek-v4-pro
+          name: deepseek-v4-pro
+        - id: tongyi/qwen3.7-plus
+          name: qwen3.7-plus
+          input: [ "text", "image" ]
+```
+
+`dsh-eyes` 不替你改 pi-ai 的配置(那是另一个插件的领地),这一步需要用户配置一次。加完之后,`deepseek-v4-pro` 就能接收贴图,而 `dsh-eyes` 会在图到达模型前把它转成文字。
+
+## 配置(视觉服务)
+
+默认值就是 mify 内网端点 + 现有 `MIFY_DEEPSEEK_API_KEY`,开箱即用。要换视觉模型/端点,在 `~/.dsh/settings.yaml` 里覆盖,或在 **设置 → dsh-eyes** 页改:
 
 ```yaml
 dsh-eyes:
-  upstream:
-    provider: mify-deepseek            # text adapter to delegate to
-    model: tongyi/deepseek-v4-pro      # text model that answers
   vision:
-    model: tongyi/qwen3.7-plus         # multimodal model for descriptions
-    credential: MIFY_DEEPSEEK_API_KEY  # DSH credential ref (not the value)
+    model: tongyi/qwen3.7-plus          # 哪个多模态模型当眼睛
+    credential: MIFY_DEEPSEEK_API_KEY   # 密钥引用名(密钥值在「设置 → 模型」里配)
     baseURL: https://api.llm.mioffice.cn/anthropic
-    prompt: 请用简体中文详细描述这张图片的内容。
-  language: zh
 ```
 
-## Notes
+设置页里的「测试连接」会发一张真图给视觉模型,验证它真的能看图。
 
-- Reuses the existing mify credential; no new API key required.
-- Per-attachment evidence cache: the same image pasted across steps is described once.
-- Vision failures are reported inline (`[image: vision failed — <reason>]`) without aborting the turn.
-- For pixel-level UI analysis, coordinate grounding, or screenshot diff, use the `dsh-vision-toolkit` plugin instead — `dsh-eyes` is for conversational "what's in this image".
-- Very small images (e.g. 1×1 / 2×2 pixels) may be rejected by the vision gateway; use real screenshots and photos.
+## 说明
 
-## Install (local link)
+- 复用现有 mify 凭据,不新建 key。
+- 按附件缓存:同一张图在多步里只描述一次。
+- 视觉失败内联提示(`[image: vision failed — <reason>]`),不中断本轮。
+- 像素级 UI 分析、坐标定位、截图 diff 请用 `dsh-vision-toolkit`;`dsh-eyes` 只做对话式「这图是啥」。
+- 极小图(1×1/2×2 像素)可能被视觉网关拒;用真实截图和照片。
 
-Linked into the dsh web profile via `~/.dsh/profiles/web/package.json`:
+## 安装(local link)
+
+挂进 dsh web profile(`~/.dsh/profiles/web/package.json`):
 
 ```json
 "dependencies": { "dsh-eyes": "link:/Users/zhuqichen/MySpace/dsh-eyes" },
-"dsh": { "profile": { "bundles": [ ..., "dsh-eyes" ] } }
+"dsh": { "profile": { "bundles": [ "...", "dsh-eyes" ] } }
 ```
 
-Then `cd ~/.dsh/profiles/web && pnpm install --no-frozen-lockfile` and restart `dsh web`.
+然后 `cd ~/.dsh/profiles/web && pnpm install --no-frozen-lockfile` 并重启 `dsh web`。
 
 License: MIT

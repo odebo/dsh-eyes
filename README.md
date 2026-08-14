@@ -1,5 +1,7 @@
 # dsh-eyes
 
+![DSH-Eyes](assets/hero.png)
+
 **给纯文本 DeepSeek 模型长一双眼睛。**
 
 在 dsh Web UI 里直接贴图;`dsh-eyes` 在后台用一个多模态模型把图转成文字描述,再交给你的纯文本模型回答——**不用切模型、不用选任何特殊 provider、不需要额外的 DeepSeek API key**。
